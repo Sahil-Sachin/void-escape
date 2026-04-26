@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Void Escape</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    color: white;
+    font-family: Arial;
+    text-align: center;
+  }
+  canvas {
+    display: block;
+    margin: auto;
+    background: #111;
+  }
+  #ui {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    font-size: 20px;
+  }
+  #leaderboard {
+    position: absolute;
+    right: 10px;
+    top: 50px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 10px;
+  }
+  #newRecord {
+    color: yellow;
+    font-size: 24px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  Score: <span id="score">0</span> |
+  High Score: <span id="high">0</span>
+  <div id="newRecord">NEW RECORD!</div>
+</div>
+
+<div id="leaderboard">
+  <b>Your All-Time Leaderboard</b>
+  <ol id="scores"></ol>
+</div>
+
+<canvas id="game" width="400" height="600"></canvas>
+
+<audio loop autoplay>
+  <source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8f3f8f0.mp3?filename=adventure-109989.mp3">
+</audio>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let player = { x: 180, y: 500, w: 40, h: 40 };
+let obstacles = [];
+let score = 0;
+let speed = 3;
+
+let highScore = localStorage.getItem("high") || 0;
+document.getElementById("high").innerText = highScore;
+
+let leaderboard = JSON.parse(localStorage.getItem("leaderboard")) || [];
+
+function saveScore(newScore) {
+  leaderboard.push(newScore);
+  leaderboard.sort((a,b)=>b-a);
+  leaderboard = leaderboard.slice(0,5);
+  localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
+  updateLeaderboard();
+}
+
+function updateLeaderboard() {
+  let list = document.getElementById("scores");
+  list.innerHTML = "";
+  leaderboard.forEach(s=>{
+    let li = document.createElement("li");
+    li.textContent = s;
+    list.appendChild(li);
+  });
+}
+updateLeaderboard();
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") player.x -= 30;
+  if (e.key === "ArrowRight") player.x += 30;
+});
+
+function spawnObstacle() {
+  obstacles.push({
+    x: Math.random() * 360,
+    y: -20,
+    w: 40,
+    h: 40
+  });
+}
+
+function gameLoop() {
+  ctx.clearRect(0,0,400,600);
+
+  ctx.fillStyle = "cyan";
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+
+  ctx.fillStyle = "red";
+  obstacles.forEach(o=>{
+    o.y += speed;
+    ctx.fillRect(o.x,o.y,o.w,o.h);
+
+    if (
+      player.x < o.x + o.w &&
+      player.x + player.w > o.x &&
+      player.y < o.y + o.h &&
+      player.y + player.h > o.y
+    ) {
+      gameOver();
+    }
+  });
+
+  obstacles = obstacles.filter(o=>o.y < 600);
+
+  score++;
+  document.getElementById("score").innerText = score;
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("high", highScore);
+    document.getElementById("high").innerText = highScore;
+    document.getElementById("newRecord").style.display = "block";
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+  saveScore(score);
+  alert("Game Over! Score: " + score);
+  location.reload();
+}
+
+setInterval(spawnObstacle, 1000);
+
+gameLoop();
+</script>
+
+</body>
+</html>
