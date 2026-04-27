@@ -220,8 +220,11 @@ function gameOver(){
   }, 50);
 }
 
-spawnInterval = setInterval(spawnObstacle,180);
-gameLoop();
+window.onload = () => {
+  console.log("GAME STARTING...");
+  spawnInterval = setInterval(spawnObstacle,180);
+  gameLoop();
+};
 
 // Tests
 console.assert(typeof player === "object", "Player missing");
