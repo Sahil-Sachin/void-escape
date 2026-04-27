@@ -31,12 +31,16 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let player = { x:180, y:500, w:40, h:40 };
-let gameRunning = true; { x:180, y:500, w:40, h:40 };
+
+let gameRunning = true;
+let spawnInterval = null;
 let obstacles = [];
 let score = 0;
 let speed = 4;
 let difficultyTimer = 0;
 let maxObstacles = 2;
+let bossWarningTimer = 0;
+let lastBossScore = 0;
 
 let highScore = parseInt(localStorage.getItem("high")) || 0;
 document.getElementById("high").innerText = highScore;
@@ -44,45 +48,80 @@ document.getElementById("high").innerText = highScore;
 let leaderboard = JSON.parse(localStorage.getItem("leaderboard") || "[]");
 
 function updateLeaderboard(){
-  let list = document.getElementById("scores");
-  list.innerHTML="";
-  leaderboard.forEach(s=>{
-    let li=document.createElement("li");
-    li.textContent=s;
+  const list = document.getElementById("scores");
+  list.innerHTML = "";
+  leaderboard.forEach(s => {
+    const li = document.createElement("li");
+    li.textContent = s;
     list.appendChild(li);
   });
 }
 updateLeaderboard();
 
-async function saveScore(newScore){
+function saveScore(newScore){
   leaderboard.push(newScore);
   leaderboard.sort((a,b)=>b-a);
-  leaderboard=leaderboard.slice(0,5);
-  localStorage.setItem("leaderboard",JSON.stringify(leaderboard));
+  leaderboard = leaderboard.slice(0,5);
+  localStorage.setItem("leaderboard", JSON.stringify(leaderboard));
   updateLeaderboard();
 }
 
 // Controls
 
-document.addEventListener("keydown",e=>{
-  if(e.key==="ArrowLeft") player.x-=30;
-  if(e.key==="ArrowRight") player.x+=30;
+document.addEventListener("keydown", e => {
+  if(e.key === "ArrowLeft") player.x -= 30;
+  if(e.key === "ArrowRight") player.x += 30;
 });
 
-// NEW: Enemy types
-function createEnemy(x,y){
-  let typeRand = Math.random();
+let touchStartX = 0;
+canvas.addEventListener("touchstart", e => {
+  touchStartX = e.touches[0].clientX;
+});
 
-  if(typeRand < 0.6){
+canvas.addEventListener("touchmove", e => {
+  let touchX = e.touches[0].clientX;
+  let diff = touchX - touchStartX;
+  if(Math.abs(diff) > 10){
+    player.x += diff * 0.2;
+    touchStartX = touchX;
+  }
+});
+
+// Enemy creation (80% red, 5% fast, 15% yellow)
+function createEnemy(x,y){
+  let r = Math.random();
+
+  if(r < 0.8){
     return { x,y,w:40,h:40,type:"normal",speed:1,color:"red" };
-  } else if(typeRand < 0.85){
+  } else if(r < 0.85){
     return { x,y,w:30,h:30,type:"fast",speed:2.2,color:"orange" };
   } else {
-    return { x,y,w:60,h:60,type:"tank",speed:0.7,color:"purple" };
+    return { x,y,w:50,h:50,type:"rare",speed:1.5,color:"yellow" };
   }
 }
 
+// FIXED spawnObstacle (clean + no duplicate code)
 function spawnObstacle(){
+  // Reliable boss spawn every ~1000 score
+  if(score > 0 && score - lastBossScore >= 1000){
+    lastBossScore = score;
+
+    bossWarningTimer = 120;
+
+    obstacles.push({
+      x: canvas.width/2 - 50,
+      y: -100,
+      w: 100,
+      h: 100,
+      type: "boss",
+      speed: 0.8,
+      color: "lime",
+      hp: 5
+    });
+
+    return;
+  }
+
   let spawnCount = Math.min(2, maxObstacles - obstacles.length);
 
   for(let i=0;i<spawnCount;i++){
@@ -97,55 +136,72 @@ function spawnObstacle(){
 
 function gameLoop(){
   if(!gameRunning) return;
+
   ctx.fillStyle="black";
   ctx.fillRect(0,0,400,600);
 
-  // stars
+  // background stars
   for(let i=0;i<30;i++){
     ctx.fillStyle="white";
     ctx.fillRect((i*50+score/5)%400,(i*80)%600,2,2);
   }
 
+  // Boss warning text
+  if(bossWarningTimer > 0){
+    ctx.fillStyle = "red";
+    ctx.font = "30px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("⚠ BOSS INCOMING ⚠", canvas.width/2, canvas.height/2 - 50);
+    bossWarningTimer--;
+  }
+
+  // Keep player in bounds
   player.x = Math.max(0, Math.min(canvas.width-player.w, player.x));
 
+  // Draw player
   ctx.fillStyle="cyan";
   ctx.fillRect(player.x,player.y,player.w,player.h);
 
-  obstacles.forEach(o=>{
+  // Start text
+  if(score === 0){
+    ctx.fillStyle = "white";
+    ctx.font = "22px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("DON'T TOUCH THE OBSTACLES", canvas.width/2, canvas.height/2);
+  }
+
+  // Obstacles
+  for (let i = 0; i < obstacles.length; i++) {
+    let o = obstacles[i];
     o.y += speed * o.speed;
 
     ctx.fillStyle = o.color;
     ctx.fillRect(o.x,o.y,o.w,o.h);
 
-    if(
-      player.x < o.x + o.w &&
-      player.x + player.w > o.x &&
-      player.y < o.y + o.h &&
-      player.y + player.h > o.y
-    ){
+    if(player.x < o.x + o.w && player.x + player.w > o.x && player.y < o.y + o.h && player.y + player.h > o.y){
       gameOver();
+      return;
     }
-  });
+  }
 
   obstacles = obstacles.filter(o=>o.y < 600);
 
   score++;
   difficultyTimer++;
 
-  if(score>700 && maxObstacles<3) maxObstacles=3;
-  if(score>1200 && maxObstacles<4) maxObstacles=4;
-  if(score>2000 && maxObstacles<5) maxObstacles=5;
-  if(score>2800 && maxObstacles<6) maxObstacles=6;
+  if(score>700) maxObstacles=3;
+  if(score>1200) maxObstacles=4;
+  if(score>2000) maxObstacles=5;
 
   if(difficultyTimer % 250 === 0) speed += 0.3;
 
   document.getElementById("score").innerText = score;
 
-  if(score>highScore){
-    highScore=score;
-    localStorage.setItem("high",highScore);
+  if(score > highScore){
+    highScore = score;
+    localStorage.setItem("high", highScore);
     document.getElementById("high").innerText = highScore;
-    document.getElementById("newRecord").style.display="block";
+    document.getElementById("newRecord").style.display = "block";
   }
 
   requestAnimationFrame(gameLoop);
@@ -154,17 +210,24 @@ function gameLoop(){
 function gameOver(){
   if(!gameRunning) return;
   gameRunning = false;
+
+  clearInterval(spawnInterval);
   saveScore(score);
+
   setTimeout(()=>{
     alert("Game Over! Score: " + score);
     location.reload();
   }, 50);
-  
 }
 
-setInterval(spawnObstacle,180);
-
+spawnInterval = setInterval(spawnObstacle,180);
 gameLoop();
+
+// Tests
+console.assert(typeof player === "object", "Player missing");
+console.assert(Array.isArray(obstacles), "Obstacles not array");
+console.assert(typeof spawnObstacle === "function", "spawnObstacle broken");
+console.assert(typeof createEnemy === "function", "createEnemy broken");
 </script>
 
 </body>
